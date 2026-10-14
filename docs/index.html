@@ -14,13 +14,13 @@
 <input id="file-search" type="search" placeholder="Try CFFL, 2025, or silver_player" aria-controls="file-list">
 <p id="file-count" role="status">Loading files from GitHub…</p><button id="refresh-files" type="button">Refresh files</button><p id="download-status" role="status"></p>
 <ul id="file-list" aria-busy="true"></ul>
-<noscript>Enable JavaScript to load the file list, or <a href="https://github.com/J123J123/Fantasy_football_coding/tree/main/docs">browse the files on GitHub</a>.</noscript>
+<noscript>Enable JavaScript to load the file list, or <a href="https://github.com/jared-summers/Fantasy_football_coding/tree/main/docs">browse the files on GitHub</a>.</noscript>
 <p id="no-results" hidden>No matching files. Try a different league or season.</p>
-<footer>Files are listed from the public GitHub repository. New files become available after they are pushed and the site is deployed. <a href="https://github.com/J123J123/Fantasy_football_coding/tree/main/docs">Browse on GitHub</a>.<br>Silver player tables include archived weeks through the report week. Schedule tables reflect the available schedule snapshot. Missing source values remain blank.<br>Download keeps the compressed .csv.gz file. “Download CSV (unzip)” decompresses it in your browser.</footer>
+<footer>Files are listed from the public GitHub repository. New files become available after they are pushed and the site is deployed. <a href="https://github.com/jared-summers/Fantasy_football_coding/tree/main/docs">Browse on GitHub</a>.<br>Silver player tables include archived weeks through the report week. Schedule tables reflect the available schedule snapshot. Missing source values remain blank.<br>Download keeps the compressed .csv.gz file. “Download CSV (unzip)” decompresses it in your browser.</footer>
 </main>
 <script>
 // Public repository listing; no credentials or generated file manifest needed.
-const repository = 'J123J123/Fantasy_football_coding';
+const repository = 'jared-summers/Fantasy_football_coding';
 const branch = 'main';
 const api = `https://api.github.com/repos/${repository}/git/trees/`;
 const list = document.getElementById('file-list');
