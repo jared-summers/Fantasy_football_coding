@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "yahoo-fantasy-data"
+version = "0.1.0"
+description = "Archive public Yahoo Fantasy Football data as compressed CSV snapshots."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["pandas>=2.0", "requests>=2.31", "python-dotenv>=1.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+yahoo-fantasy-data = "yahoo_fantasy_data.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = ["integration: manually invoked tests that make live Yahoo requests"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
