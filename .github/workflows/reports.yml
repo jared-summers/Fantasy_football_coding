@@ -1,5 +1,8 @@
 name: Backfill and publish league reports
 on:
+  schedule:
+    # Wednesday 10:00 UTC, after the Monday-night game and ESPN's week rollover.
+    - cron: '0 10 * * 3'
   workflow_dispatch:
     inputs:
       config:
@@ -33,7 +36,9 @@ jobs:
       - run: python -m pytest report_code/tests yahoo-fantasy-data/tests -m 'not integration' -q
       - name: Collect archives and build site
         env:
-          RUN_CONFIG: ${{ inputs.config }}
+          RUN_CONFIG: ${{ inputs.config || 'report_runs.json' }}
+          ESPN_S2: ${{ secrets.ESPN_S2 }}
+          ESPN_SWID: ${{ secrets.ESPN_SWID }}
           YAHOO_CLIENT_ID: ${{ secrets.YAHOO_CLIENT_ID }}
           YAHOO_CLIENT_SECRET: ${{ secrets.YAHOO_CLIENT_SECRET }}
           YAHOO_REFRESH_TOKEN: ${{ secrets.YAHOO_REFRESH_TOKEN }}

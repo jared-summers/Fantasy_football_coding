@@ -1,46 +1,9 @@
 [
   {
-    "league_id": "1500072",
+    "provider": "espn",
+    "league_id": "12345678",
     "year": 2026,
-    "nickname": "PHFFL_A",
-    "template": "pc"
-  },
-  {
-    "league_id": "1500113",
-    "year": 2026,
-    "nickname": "PHFFL_B",
-    "template": "pc"
-  },
-  {
-    "league_id": "526206",
-    "year": 2026,
-    "nickname": "CFFL_A",
+    "nickname": "My_ESPN_League",
     "template": "original"
-  },
-  {
-    "league_id": "857540",
-    "year": 2026,
-    "nickname": "CFFL_B",
-    "template": "original"
-  },
-  {
-    "league_id": "236541",
-    "year": 2026,
-    "nickname": "Ferda",
-    "template": "original"
-  },
-  {
-    "provider": "sleeper",
-    "league_id": "1385727391816503296",
-    "year": 2026,
-    "nickname": "The_Future_1pct",
-    "template": "original"
-  },
-  {
-    "provider": "sleeper",
-    "league_id": "1381449584168955904",
-    "year": 2026,
-    "nickname": "Borneman_Pipich_Family_Fun_League",
-    "template": "both"
   }
 ]

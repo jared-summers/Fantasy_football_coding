@@ -395,9 +395,10 @@ class ReportProcessor:
             raise ValueError("template must be 'original' or 'pc'")
         template = Path(template_path) if template_path else Path(__file__).resolve().parents[1] / 'report_template' / templates[template]
         html = template.read_text(encoding='utf-8')
-        if getattr(self, 'metadata', {}).get('provider') == 'sleeper':
+        provider_name = {'sleeper': 'Sleeper', 'espn': 'ESPN'}.get(getattr(self, 'metadata', {}).get('provider'))
+        if provider_name:
             # Display wording only; retain legacy JSON keys for compatibility.
-            html = html.replace('Yahoo', 'Sleeper')
+            html = html.replace('Yahoo', provider_name)
         pattern = r'(<script\s+id="report-data"\s+type="application/json">).*?(</script>)'
         safe_json = self.to_json().replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
         html, count = re.subn(pattern, lambda m: m[1] + '\n' + safe_json + '\n' + m[2], html, flags=re.S)

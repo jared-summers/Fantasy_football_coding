@@ -37,8 +37,8 @@ def load_runs(path):
                               'overwrite', 'strict', 'template', 'provider'}
         if unknown:
             raise ValueError(f'Unknown run fields: {sorted(unknown)}')
-        if run.get('provider', 'yahoo') not in ('yahoo', 'sleeper'):
-            raise ValueError('provider must be yahoo or sleeper')
+        if run.get('provider', 'yahoo') not in ('yahoo', 'sleeper', 'espn'):
+            raise ValueError('provider must be yahoo, sleeper, or espn')
         if type(run.get('year')) is not int or not 2000 <= run['year'] <= 2100:
             raise ValueError('Each run needs an integer year between 2000 and 2100')
         if not isinstance(run.get('league_id'), (str, int)) or isinstance(run['league_id'], bool) or not str(run['league_id']).isdigit():
@@ -67,6 +67,9 @@ def resolve_week(run, data_path, *, backfill, settings):
     from yahoo_fantasy_data.utils import first_value
     if backfill and run.get('provider') == 'sleeper':
         from .sleeper import league_metadata
+        metadata, _ = league_metadata(run['year'], str(run['league_id']))
+    elif backfill and run.get('provider') == 'espn':
+        from .espn import league_metadata
         metadata, _ = league_metadata(run['year'], str(run['league_id']))
     elif backfill:
         from yahoo_fantasy_data.yahoo import league_metadata
@@ -161,6 +164,8 @@ def main():
             collect = backfill_season
             if run.get('provider') == 'sleeper':
                 from .sleeper import backfill_season as collect
+            elif run.get('provider') == 'espn':
+                from .espn import backfill_season as collect
             statuses = collect(year, str(run['league_id']), 1, week,
                                        args.overwrite or run.get('overwrite', False),
                                        settings=settings, league_nickname=name,
