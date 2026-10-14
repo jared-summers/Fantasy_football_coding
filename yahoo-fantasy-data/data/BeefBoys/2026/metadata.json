@@ -1,0 +1,19 @@
+{
+  "provider": "espn",
+  "league_id": "1644786",
+  "league_key": "espn.l.1644786",
+  "league_name": "4th and 26 A Sports Podcast?",
+  "season": 2026,
+  "current_week": 6,
+  "is_finished": false,
+  "start_week": 1,
+  "end_week": 18,
+  "uses_playoff": 1,
+  "playoff_start_week": 15,
+  "notes": [
+    "ESPN only lists players who are currently unrostered, so the free-agent pool for a past week omits anyone picked up since. Market baselines (VOBM) are most accurate for weeks collected soon after they were played.",
+    "ESPN projections are the values stored with each historical box score and may differ from what was shown before kickoff.",
+    "Player names, positions, team names, divisions and league settings reflect collection time; weekly ownership and starters come from historical box scores."
+  ],
+  "last_collected_week": 5
+}
