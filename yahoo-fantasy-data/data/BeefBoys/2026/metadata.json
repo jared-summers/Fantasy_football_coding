@@ -4,7 +4,7 @@
   "league_key": "espn.l.1644786",
   "league_name": "4th and 26 A Sports Podcast?",
   "season": 2026,
-  "current_week": 6,
+  "current_week": 7,
   "is_finished": false,
   "start_week": 1,
   "end_week": 18,
@@ -15,5 +15,5 @@
     "ESPN projections are the values stored with each historical box score and may differ from what was shown before kickoff.",
     "Player names, positions, team names, divisions and league settings reflect collection time; weekly ownership and starters come from historical box scores."
   ],
-  "last_collected_week": 5
+  "last_collected_week": 6
 }
