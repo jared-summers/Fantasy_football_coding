@@ -286,7 +286,7 @@ def test_flex_optimizer_does_not_reuse_players():
 def test_gold_calculations_and_round_trip(archive,tmp_path):
     r=ReportProcessor(archive,simulation_count=100,official_scores_path=archive/'scores.csv')
     payload=r.to_dict()
-    assert len(r.gold_tables)==10
+    assert len(r.gold_tables)==11
     assert all(isinstance(t,pd.DataFrame) for t in r.gold_tables.values())
     assert r.gold_managerial_expertise.iloc[0].actual_points==42
     assert r.gold_managerial_expertise.iloc[0].optimal_points==66

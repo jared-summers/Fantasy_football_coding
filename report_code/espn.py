@@ -6,11 +6,14 @@ Weekly rosters, starters, scores and projections come from historical box
 scores. Lineup slots are read from the league's own box scores, so leagues
 with different slots (no kicker, two flex spots, ...) need no configuration.
 
-Run ``python -m report_code.espn LEAGUE_ID YEAR WEEK`` to print a sanity check
-of what ESPN returns for one week before publishing anything.
+Trades come from ESPN's transaction log (``league.recent_activity``) and are saved
+as a ``trades`` snapshot; if the log cannot be read the report infers trades from
+rosters instead. Run ``python -m report_code.espn LEAGUE_ID YEAR WEEK`` to print a
+sanity check of what ESPN returns for one week before publishing anything.
 """
 from collections import Counter, defaultdict
-from datetime import date
+from datetime import date, datetime, timezone
+import hashlib
 import json
 import os
 import sys
@@ -137,6 +140,76 @@ def draft_picks(league):
     return picks
 
 
+TRADE_COLUMNS = ['trade_id', 'trade_date', 'team_id', 'player_id', 'player_name', 'kind']
+
+
+def activity_pages(league, page=100, max_pages=60):
+    """Every logged transaction, newest first, paging through espn-api's recent_activity."""
+    seen, found, offset = set(), [], 0
+    for _ in range(max_pages):
+        try:
+            batch = list(league.recent_activity(size=page, offset=offset))
+        except TypeError:    # older espn-api without paging: take one large page
+            return list(league.recent_activity(size=page * 10))
+        fresh = []
+        for activity in batch:
+            key = (activity.date, tuple((getattr(a[0], 'team_id', a[0]), str(a[1]), str(a[2])) for a in activity.actions))
+            if key not in seen:
+                seen.add(key)
+                fresh.append(activity)
+        found += fresh
+        if len(batch) < page or not fresh:
+            break
+        offset += page
+    return found
+
+
+def _player_fields(player):
+    if isinstance(player, str):
+        return None, player
+    return getattr(player, 'playerId', None), getattr(player, 'name', str(player))
+
+
+def _day(stamp):
+    if isinstance(stamp, (int, float)):
+        return datetime.fromtimestamp(stamp / 1000, tz=timezone.utc).strftime('%Y-%m-%d')
+    return str(stamp)[:10]
+
+
+def trade_log(league):
+    """Rows describing every trade in ESPN's transaction log, or None when the log cannot be read.
+
+    Each row is one player moved, with the team the log names for that move. The report never relies on
+    which side of the trade that team was: sender and receiver are confirmed against the weekly rosters.
+    An empty list means the log was read and the league has no trades yet.
+    """
+    try:
+        activities = activity_pages(league)
+    except Exception as error:
+        warnings.warn(f'Could not read the ESPN transaction log ({error}); trades will be inferred from rosters')
+        return None
+    rows = []
+    for activity in activities:
+        moves = [a for a in activity.actions if 'TRADE' in str(a[1]).upper()]
+        if not moves:
+            continue
+        label = '|'.join(sorted(str(_player_fields(a[2])[1]) for a in moves))
+        trade_id = f"t{activity.date}_{hashlib.md5(label.encode()).hexdigest()[:6]}"
+        for action in moves:
+            pid, name = _player_fields(action[2])
+            rows.append(dict(trade_id=trade_id, trade_date=_day(activity.date),
+                             team_id=getattr(action[0], 'team_id', action[0]),
+                             player_id=None if pid is None else str(pid), player_name=name, kind='trade'))
+    return rows
+
+
+def write_table(path, table):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix('.tmp')
+    table.to_csv(temporary, index=False, compression={'method': 'gzip', 'mtime': 0})
+    temporary.replace(path)
+
+
 def backfill_season(season, league_id, start_week, end_week, overwrite=False, *,
                     settings, league_nickname, refresh_latest=True, league=None):
     year = season
@@ -240,6 +313,16 @@ def backfill_season(season, league_id, start_week, end_week, overwrite=False, *,
             table.to_csv(temporary, index=False, compression={'method': 'gzip', 'mtime': 0})
             temporary.replace(path)
         statuses[week] = {f: 'written' for f in folders}
+    # The log is a full history, so each run saves one fresh snapshot at the latest week. It sits outside the
+    # per-week skip check on purpose: collecting it never re-collects (and so never changes) older weeks.
+    log = trade_log(league)
+    if log is not None:
+        table = pd.DataFrame(log or [dict(kind='none')], columns=TRADE_COLUMNS)
+        for column, value in dict(season=year, league_id=str(league_id), league_key=metadata['league_key'],
+                                  week=end_week).items():
+            table[column] = value
+        write_table(root / 'trades' / f'trades_week_{end_week}.csv.gz', table)
+        statuses.setdefault(end_week, {})['trades'] = 'written'
     root.mkdir(parents=True, exist_ok=True)
     metadata['last_collected_week'] = max(end_week, old.get('last_collected_week', 0))
     (root / 'metadata.json').write_text(json.dumps(metadata, indent=2) + '\n')
@@ -265,6 +348,23 @@ def probe(league, week):
     projected = sum(row['projected'] is not None for row in found.values())
     print(f'Free agents with week-{week} points: {len(found)} ({projected} with projections)')
     print(f"Draft picks found: {len(draft_picks(league))}")
+    try:
+        activities = activity_pages(league)
+    except Exception as error:
+        print(f'Transaction log: could not be read ({type(error).__name__}: {error})')
+        return
+    trades = [a for a in activities if any('TRADE' in str(x[1]).upper() for x in a.actions)]
+    print(f'Transaction log: {len(activities)} transactions read, {len(trades)} of them trades')
+    kinds = Counter(str(x[1]) for a in activities for x in a.actions)
+    print('  action labels seen:', dict(kinds))
+    for activity in trades[:3]:
+        print(f'  trade on {_day(activity.date)}:')
+        for team, action, player, *rest in activity.actions:
+            pid, name = _player_fields(player)
+            print(f"    team {getattr(team, 'team_id', team)} | {action} | {name} | player id {pid}")
+    if trades:
+        sample = trades[0]
+        print('  activity attributes:', sorted(x for x in dir(sample) if not x.startswith('_')))
 
 
 if __name__ == '__main__':

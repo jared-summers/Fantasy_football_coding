@@ -245,7 +245,8 @@ tbody tr:nth-child(even){background:#fbfcfd}tbody tr:hover{background:#f3f7fa}.m
     ['expertise','07','Lineup management','Managerial Expertise'],
     ['vobl','08','Roster value','Value Over Baseline — Expanded'],
     ['playoffs','09','Season outlook','Playoff Odds'],
-    ['draft','10','Draft capital',"Draft Value Analysis"]
+    ['draft','10','Draft capital',"Draft Value Analysis"],
+    ['trades','11','Trades','Trade Report Card']
   ];
 
   document.title = `${data.meta?.title || 'Fantasy Report'} — ${data.meta?.league_name || ''}`;
@@ -474,7 +475,35 @@ tbody tr:nth-child(even){background:#fbfcfd}tbody tr:hover{background:#f3f7fa}.m
     return sectionShell('draft','10','Draft capital',"Draft Value Analysis",s.description,`<div class="grid grid-stack">${stackedChart(s.historical,buckets,'Historical Points From Rounds')}${stackedChart(s.optimal,buckets,'Optimal Points From Rounds')}</div>`);
   }
 
-  const html=[renderBoned(),renderBonedTotal(),renderFreaky(),renderBhole(),renderStuds(),renderGrower(),renderExpertise(),renderVobl(),renderPlayoffs(),renderDraft()].filter(Boolean).join('');
+  function renderTrades(){
+    const s=data.trades;if(!s)return '';
+    const sg=(v,d=1)=>v==null||v===''?'—':`${Number(v)>0?'+':''}${Number(v).toFixed(d)}`;
+    const tone=v=>v==null||v===''?'':Number(v)>0.05?'pos':Number(v)<-0.05?'neg':'';
+    const players=list=>(list||[]).map(p=>`${esc(p.name)} <small>${esc(p.position||'')} · ${n(p.points,1)} pts</small>`).join('<br>')||'—';
+    const cell=(v,d)=>`<td class="${tone(v)}">${sg(v,d)}</td>`;
+    const withTrades=(s.teams||[]).filter(t=>t.trades>0).sort((a,b)=>(b.lineup_net??0)-(a.lineup_net??0)||(b.por_net??0)-(a.por_net??0));
+    const partial=withTrades.some(t=>t.unavailable>0)?'<p class="note">Some trades have a metric that could not be calculated; totals include only the metrics that were available.</p>':'';
+    const board=withTrades.length?`<h4>Trade scoreboard</h4><div class="table-wrap"><table><thead><tr><th>Team</th><th>Trades</th><th>Won-Lost-Even</th><th>Raw pts</th><th>Pts over replacement</th><th>Lineup pts</th><th>Est. wins</th></tr></thead><tbody>${withTrades.map(t=>`<tr><td class="manager">${esc(manager(t.team_id))}</td><td>${t.trades}</td><td>${t.won}-${t.lost}-${t.even}</td>${cell(t.raw_net)}${cell(t.por_net)}${cell(t.lineup_net)}${cell(t.wins_net)}</tr>`).join('')}</tbody></table></div>${partial}`:'';
+    const trades=[...(s.trades||[])].sort((a,b)=>b.week-a.week||String(b.trade_id).localeCompare(String(a.trade_id)));
+    let anyMissing=false;
+    const cards=trades.map(t=>{
+      const votes=Object.values(t.votes||{});
+      const result=t.winner==null?esc(t.label):`${esc(manager(t.winner))} wins · ${esc(t.label)} (${Math.max(...votes)}–${Math.min(...votes)} on the metrics)`;
+      const rows=t.sides.map(x=>{
+        const flag=x.missing_player_weeks>0?(anyMissing=true,'*'):'';
+        return `<tr><td class="manager">${esc(manager(x.team_id))}${flag}</td><td style="text-align:left">${players(x.received)}</td><td style="text-align:left">${players(x.sent)}</td>${cell(x.raw_net)}${cell(x.por_net)}${cell(x.lineup_net)}${cell(x.wins_net)}</tr>`;
+      }).join('');
+      const day=t.date?` (${esc(String(t.date).slice(0,10))})`:'';const inferred=t.origin==='roster'&&s.source==='transaction log'?' <small>(seen in the rosters, not in the log)</small>':'';
+      return `<h4>Week ${t.week}${day}: ${t.sides.map(x=>esc(manager(x.team_id))).join(' \u21c4 ')} — ${result}${inferred}</h4><div class="table-wrap"><table><thead><tr><th>Team</th><th style="text-align:left">Received</th><th style="text-align:left">Gave up</th><th>Raw pts</th><th>Pts over replacement</th><th>Lineup pts</th><th>Est. wins</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    }).join('');
+    const unconfirmed=s.unconfirmed_moves?`${s.unconfirmed_moves} one-way player move${s.unconfirmed_moves===1?'':'s'} between teams could be a trade or a waiver claim, so ${s.unconfirmed_moves===1?'it was':'they were'} not rated. `:'';
+    const unrated=(s.unrated||[]).length?`<h4>Trades not rated</h4><ul style="font-size:12px;color:#44505c;margin:6px 0 0 18px">${s.unrated.map(u=>`<li>${u.date?esc(String(u.date).slice(0,10))+': ':''}${Object.entries(u.players||{}).map(([team,list])=>`${esc(manager(team))} — ${list.length?esc(list.join(', ')):'no players'}`).join('; ')} (${esc(u.reason)})</li>`).join('')}</ul>`:'';
+    const body=(trades.length?`${board}${cards}${unrated}`:`<div class="empty">No rated trades through Week ${esc(data.meta?.current_week??'')}.</div>${unrated}`)
+      +`<p class="note">${unconfirmed}Each team's numbers are what it received minus what it gave up, from the first week on its new roster. Green is a gain and red is a loss. ${anyMissing?'* Some weeks had no score data for a traded player, which counts as zero.':''}</p>`;
+    return sectionShell('trades','11','Trades','Trade Report Card',s.description,body);
+  }
+
+  const html=[renderBoned(),renderBonedTotal(),renderFreaky(),renderBhole(),renderStuds(),renderGrower(),renderExpertise(),renderVobl(),renderPlayoffs(),renderDraft(),renderTrades()].filter(Boolean).join('');
   document.getElementById('sections').innerHTML=html;
   const metricTooltip=document.createElement('div');
   metricTooltip.id='metric-tooltip';metricTooltip.className='metric-tooltip';

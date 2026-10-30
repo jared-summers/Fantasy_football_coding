@@ -84,7 +84,8 @@ Do not treat this pseudocode as a required package structure. It only shows the 
   "managerial_expertise": {},
   "vobl": {},
   "playoff_odds": {},
-  "draft_analysis": {}
+  "draft_analysis": {},
+  "trades": {}
 }
 ```
 
@@ -571,6 +572,47 @@ For maximum safety when embedding arbitrary strings in an HTML script element, e
 
 ---
 
+# 13b. `trades` (optional)
+
+Optional. Omit the key (or supply no trades) and the section shows "No trades detected". `trades` lists one entry per
+trade; every trade has exactly two `sides`. Net values are what the side received minus what it gave up, from the
+trade week through `meta.current_week`. Use `null` for a metric that could not be calculated.
+
+```json
+"trades": {
+  "description": "How trades were found and rated.",
+  "unconfirmed_moves": 24,
+  "trades": [
+    {
+      "trade_id": "w7_2_8",
+      "week": 7,
+      "winner": "2",
+      "label": "Slight",
+      "margin": 12.3,
+      "votes": {"2": 2, "8": 1},
+      "sides": [
+        {
+          "team_id": "2",
+          "received": [{"player_id": "p1", "name": "Player One", "position": "WR", "points": 113.2, "por": 40.1}],
+          "sent": [{"player_id": "p2", "name": "Player Two", "position": "QB", "points": 123.5, "por": 4.8}],
+          "raw_net": -10.3, "por_net": 35.3, "lineup_net": 16.3, "wins_net": 0.0,
+          "missing_player_weeks": 0
+        }
+      ]
+    }
+  ],
+  "teams": [
+    {"team_id": "2", "trades": 2, "won": 2, "lost": 0, "even": 0,
+     "raw_net": 21.6, "por_net": 36.9, "lineup_net": 16.7, "wins_net": 0.0, "unavailable": 0}
+  ]
+}
+```
+
+`winner` is a team id or `null`. `label` is one of Lopsided, Clear, Slight, Split decision, Even. `teams` has one row per team,
+including teams with no trades (the table shows only teams with `trades` above zero).
+
+---
+
 # 15. Validation rules before writing the HTML
 
 The Python reporting layer should validate at least the following:
@@ -585,6 +627,7 @@ The Python reporting layer should validate at least the following:
 8. The VOBL position keys agree with `vobl.positions`.
 9. Draft row keys agree with `draft_analysis.buckets`.
 10. No JSON value is `NaN` or infinite.
+11. Every trade has exactly two sides, and `teams` covers every team.
 
 Prefer failing loudly during report generation rather than silently drawing an incomplete report.
 

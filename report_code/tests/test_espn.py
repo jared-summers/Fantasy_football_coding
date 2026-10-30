@@ -37,6 +37,7 @@ class FakeLeague:
         self.draft = [NS(team=by_id[t], playerId=t * 100 + i, round_num=1 + i // 4, round_pick=t)
                       for t in range(1, 5) for i in (0, 4)]
         self.empty_slot_team = None
+        self.activity = []     # transaction log: objects with .date and .actions
 
     def lineup(self, team, week):
         rows = []
@@ -58,6 +59,9 @@ class FakeLeague:
                             home_score=totals[0], away_score=totals[1],
                             home_lineup=self.lineup(a, week), away_lineup=self.lineup(b, week)))
         return boxes
+
+    def recent_activity(self, size=25, offset=0):
+        return self.activity[offset:offset + size]
 
     def free_agents(self, week=None, size=50, position=None):
         assert position != 'K', 'a league without kickers must not request kickers'

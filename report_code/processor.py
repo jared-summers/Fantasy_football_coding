@@ -12,7 +12,7 @@ import pandas as pd
 
 NON_STARTERS = {'BN', 'IR', 'IR+', 'NA', 'RES'}
 REPORTS = ('boned_index', 'boned_detail', 'freaky_friday', 'bhole', 'studs_duds',
-           'grower_shower', 'managerial_expertise', 'vobl', 'playoff_odds', 'draft_analysis')
+           'grower_shower', 'managerial_expertise', 'vobl', 'playoff_odds', 'draft_analysis', 'trades')
 
 
 def records(frame):
@@ -35,7 +35,7 @@ class ReportProcessor:
 
     sources = {'draft': 'draft', 'settings': 'league_settings', 'player': 'player_data',
                'projection': 'projection_data', 'schedule': 'schedule', 'team_data': 'team_data',
-               'divisions': 'divisions', 'points_recon': 'points recon'}
+               'divisions': 'divisions', 'points_recon': 'points recon', 'trades': 'trades'}
 
     def __init__(self, data_path, current_week=None, *, data_files=None,
                  official_scores_path=None, tolerance=0.01, simulation_count=10000,
@@ -146,6 +146,8 @@ class ReportProcessor:
     def bronze_divisions(self): return self.read_files('divisions', latest=True)
     @cached_property
     def bronze_points_recon(self): return self.read_files('points_recon')
+    @cached_property
+    def bronze_trades(self): return self.read_files('trades', latest=True)
 
     @staticmethod
     def _unique(frame, keys, name):
