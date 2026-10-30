@@ -115,6 +115,8 @@ def logged(processor, own):
     except FileNotFoundError:
         return None
     log = log[log.kind.eq('trade')] if 'kind' in log else log.iloc[:0]
+    if 'role' not in log:
+        log = log.assign(role='moved')
     players = processor.silver_player.sort_values('week').drop_duplicates('player_id', keep='last')
     by_name = {}
     for pid, name in zip(players.player_id, players.player_name):
@@ -124,23 +126,26 @@ def logged(processor, own):
     for trade_id, group in log.groupby('trade_id', sort=False):
         group = group.assign(team=[_team(t) for t in group.team_id])
         teams = sorted(set(group.team.dropna()))
-        found, moved = {}, {team: [] for team in teams}      # player id -> team the log names for him
+        receiver, received = {}, {team: [] for team in teams}   # player id -> team the log says received him
         for row in group.itertuples():
-            if row.team is not None:
-                moved[row.team].append(str(names.get(str(row.player_id), row.player_name))
-                                       if pd.isna(row.player_name) else str(row.player_name))
+            if row.team is None or row.role == 'sent':
+                continue                                        # a 'sent' line repeats a 'received' one
+            name = str(names.get(str(row.player_id), row.player_name)) if pd.isna(row.player_name) else str(row.player_name)
+            if name not in received[row.team]:
+                received[row.team].append(name)
             pid = None if pd.isna(row.player_id) else str(row.player_id)
             if pid is None:
-                pid = next((c for c in by_name.get(str(row.player_name).strip().lower(), []) if c in own.index
+                pid = next((c for c in by_name.get(name.strip().lower(), []) if c in own.index
                             and set(own.loc[c].dropna().astype(str)) & set(teams)), None)
             if pid is not None:
-                found[pid] = row.team
+                receiver[pid] = row.team
         date = None if group.trade_date.isna().all() else str(group.trade_date.iloc[0])[:10]
         if len(teams) != 2:
-            unrated.append(dict(trade_id=trade_id, date=date, teams=teams, players=moved,
-                                reason='One-way player trade (draft picks are not valued)' if len(teams) < 2 else 'Three or more teams'))
+            unrated.append(dict(trade_id=trade_id, date=date, teams=teams, players=received,
+                                reason='One-way player trade (draft picks are not valued)' if len(teams) < 2
+                                else 'Three or more teams'))
             continue
-        arrivals = {pid: _arrival(own, tuple(teams), pid, team) for pid, team in found.items()}
+        arrivals = {pid: _arrival(own, tuple(teams), pid, team) for pid, team in receiver.items()}
         arrivals = {pid: a for pid, a in arrivals.items() if a and a[0] <= processor.current_week}
         sent = {team: [pid for pid, a in arrivals.items() if a[1] == team] for team in teams}
         if not arrivals:
@@ -149,7 +154,7 @@ def logged(processor, own):
             rated.append(dict(trade_id=trade_id, week=min(a[0] for a in arrivals.values()), teams=tuple(teams),
                               sent=sent, date=date, origin='log'))
         else:
-            unrated.append(dict(trade_id=trade_id, date=date, teams=teams, players=moved,
+            unrated.append(dict(trade_id=trade_id, date=date, teams=teams, players=received,
                                 reason='One-way player trade (draft picks are not valued)'))
     return rated, unrated, unresolved
 

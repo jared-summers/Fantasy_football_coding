@@ -166,18 +166,29 @@ def player(pid, name):
     return NS(playerId=pid, name=name)
 
 
-def activity(league, day, *moves):
-    """Append a logged transaction; each move is (team_id, player or player name)."""
-    league.activity.append(NS(date=stamp(day), actions=[(league.teams[t - 1], 'TRADED', p, 0) for t, p in moves]))
+def activity(league, day, *moves, legacy=False):
+    """Append a logged trade; each move is (sending team id, receiving team id, player or player name).
+
+    ESPN's real format logs each player twice: TRADE_SENT for the sender and TRADE_RECEIVED for the receiver.
+    legacy=True writes the single 'TRADED' line (receiver only) instead.
+    """
+    actions = []
+    for sender, receiver, who in moves:
+        if legacy:
+            actions.append((league.teams[receiver - 1], 'TRADED', who, 0))
+        else:
+            actions.append((league.teams[sender - 1], 'TRADE_SENT', who, 0))
+            actions.append((league.teams[receiver - 1], 'TRADE_RECEIVED', who, 0))
+    league.activity.append(NS(date=stamp(day), actions=actions))
 
 
-def swap_log(league, reverse=False, names_only=False):
+def swap_log(league, reverse=False, names_only=False, legacy=False):
     """The log entry for the week-2 swap of teams 1 and 2 (team 1 gets 201, team 2 gets 101)."""
     a, b = (player(201, 'P2-1'), player(101, 'P1-1'))
     if names_only:
         a, b = a.name, b.name
-    moves = [(1, a), (2, b)]
-    activity(league, 14, *(reversed(moves) if reverse else moves))
+    moves = [(2, 1, a), (1, 2, b)]
+    activity(league, 14, *(reversed(moves) if reverse else moves), legacy=legacy)
 
 
 def noise(league, count):
@@ -201,11 +212,13 @@ def test_logged_trade_is_confirmed_against_rosters(tmp_path):
     data = r.to_dict()['trades']
     assert data['source'] == 'transaction log' and data['trades'][0]['date'] == '2026-10-14'
     assert data['trades'][0]['origin'] == 'log' and 'transaction log' in data['description']
-    assert (tmp_path / 'Test' / '2026' / 'trades' / 'trades_week_3.csv.gz').exists()
+    snapshot = pd.read_csv(tmp_path / 'Test' / '2026' / 'trades' / 'trades_week_3.csv.gz')
+    assert sorted(snapshot.role) == ['received', 'received', 'sent', 'sent']
+    assert set(snapshot.kind) == {'trade'}
 
 
 def test_log_direction_and_name_only_entries_do_not_matter(tmp_path):
-    for options in (dict(reverse=True), dict(names_only=True), dict(reverse=True, names_only=True)):
+    for options in (dict(reverse=True), dict(names_only=True), dict(reverse=True, names_only=True), dict(legacy=True)):
         league = TradeLeague()
         swap_log(league, **options)
         _, (found, _, unrated, source) = log_report(tmp_path / str(sorted(options)), league)
@@ -215,15 +228,46 @@ def test_log_direction_and_name_only_entries_do_not_matter(tmp_path):
 
 def test_picks_and_three_team_trades_are_listed_not_rated(tmp_path):
     league = TradeLeague()
-    league.swap = False
-    activity(league, 10, (3, 'P4-9'))                                    # a player for a draft pick
-    activity(league, 12, (1, 'P2-9'), (2, 'P3-9'), (3, 'P1-9'))          # three teams
+    league.swap, league.one_way = False, True                           # team 3's 301 really moves to team 4
+    activity(league, 10, (3, 4, player(301, 'P3-1')))                   # a player for a draft pick
+    activity(league, 12, (2, 1, 'P2-9'), (3, 2, 'P3-9'), (1, 3, 'P1-9'))   # three teams
     r, (found, unconfirmed, unrated, source) = log_report(tmp_path, league)
-    assert found == [] and source == 'transaction log'
+    assert found == [] and source == 'transaction log' and unconfirmed == 0
     assert sorted(u['reason'] for u in unrated) == ['One-way player trade (draft picks are not valued)', 'Three or more teams']
     payload = r.to_dict()['trades']
     assert payload['trades'] == [] and len(payload['unrated']) == 2
-    assert payload['unrated'][0]['players']
+    one_way = next(u for u in payload['unrated'] if u['reason'].startswith('One-way'))
+    assert one_way['players'] == {'3': [], '4': ['P3-1']}               # who received what comes from the log
+
+
+def test_uneven_multi_player_trade_is_rated(tmp_path):
+    """Two players for one, like a real consolidation trade; a bench-only swap leaves lineups alone."""
+    league = TradeLeague()
+    league.swap = False
+    original = league.lineup
+
+    def bench(team, week):
+        rows = original(team, week)
+        if week >= 2 and team == 1:
+            rows = [r for r in rows if r.playerId not in (109, 110)] + [NS(
+                playerId=209, name='P2-9', position='RB', slot_position='BE', points=points(2, week, 9),
+                projected_points=1.0, proTeam='XXX')]
+        if week >= 2 and team == 2:
+            rows = [r for r in rows if r.playerId != 209] + [NS(
+                playerId=pid, name=f'P1-{pid - 100}', position=pos, slot_position='BE',
+                points=points(1, week, pid - 100), projected_points=1.0, proTeam='XXX')
+                for pid, pos in ((109, 'RB'), (110, 'WR'))]
+        return rows
+    league.lineup = bench
+    activity(league, 14, (1, 2, player(109, 'P1-9')), (1, 2, player(110, 'P1-10')), (2, 1, player(209, 'P2-9')))
+    r, (found, _, unrated, source) = log_report(tmp_path, league)
+    assert unrated == [] and source == 'transaction log'
+    assert [(t['origin'], t['sent']) for t in found] == [('log', {'1': ['109', '110'], '2': ['209']})]
+    table = trades.build(r).set_index('team_id')
+    assert table.loc['1', 'raw_received'] == pytest.approx(sum(points(2, w, 9) for w in (2, 3)))
+    assert table.loc['1', 'raw_sent'] == pytest.approx(sum(points(1, w, 9) + points(1, w, 10) for w in (2, 3)))
+    assert table.lineup_net.notna().all()
+    assert len(r.to_dict()['trades']['trades'][0]['sides'][0]['sent']) == 2
 
 
 def test_empty_log_still_infers_a_visible_swap(tmp_path):
@@ -254,12 +298,12 @@ def test_log_paging_and_old_library_without_offset(tmp_path):
     noise(league, 250)
     swap_log(league)                                        # the trade sits on the last page
     from report_code import espn
-    assert any(a.actions[0][1] == 'TRADED' for a in espn.activity_pages(league))
+    assert any('TRADE' in a.actions[0][1] for a in espn.activity_pages(league))
     legacy = TradeLeague()
     noise(legacy, 250)
     swap_log(legacy)
     legacy.recent_activity = lambda size=25: legacy.activity[:size]      # no offset argument
-    assert any(a.actions[0][1] == 'TRADED' for a in espn.activity_pages(legacy))
+    assert any('TRADE' in a.actions[0][1] for a in espn.activity_pages(legacy))
 
 
 def test_only_the_latest_week_is_recollected(tmp_path):
@@ -272,3 +316,30 @@ def test_only_the_latest_week_is_recollected(tmp_path):
                                     league_nickname='Test', league=league)
     assert statuses[3]['trades'] == 'written' and 'trades' not in statuses[1]
     assert set(statuses[1].values()) == {'skipped'}
+
+
+class ChainLeague(TradeLeague):
+    """Player 101 goes team 1 -> team 2 in week 2, then team 2 -> team 3 in week 3 (for 301)."""
+
+    def lineup(self, team, week):
+        rows = super().lineup(team, week)
+        if week >= 3 and team == 2:
+            for row in rows:
+                if row.playerId == 101:
+                    row.playerId, row.name, row.points = 301, 'P3-1', points(3, week, 1)
+        if week >= 3 and team == 3:
+            for row in rows:
+                if row.playerId == 301:
+                    row.playerId, row.name, row.points = 101, 'P1-1', points(1, week, 1)
+        return rows
+
+
+def test_player_traded_twice_belongs_to_the_right_trade_each_time(tmp_path):
+    league = ChainLeague()
+    swap_log(league)                                                            # 101 and 201 swap on Oct 14
+    activity(league, 21, (2, 3, player(101, 'P1-1')), (3, 2, player(301, 'P3-1')))   # then 101 moves on
+    _, (found, _, unrated, source) = log_report(tmp_path, league)
+    assert unrated == [] and source == 'transaction log'
+    summary = sorted((t['week'], t['teams'], t['sent'], t['date']) for t in found)
+    assert summary == [(2, ('1', '2'), {'1': ['101'], '2': ['201']}, '2026-10-14'),
+                       (3, ('2', '3'), {'2': ['101'], '3': ['301']}, '2026-10-21')]

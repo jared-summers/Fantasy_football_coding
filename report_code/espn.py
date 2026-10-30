@@ -140,7 +140,7 @@ def draft_picks(league):
     return picks
 
 
-TRADE_COLUMNS = ['trade_id', 'trade_date', 'team_id', 'player_id', 'player_name', 'kind']
+TRADE_COLUMNS = ['trade_id', 'trade_date', 'team_id', 'role', 'player_id', 'player_name', 'kind']
 
 
 def activity_pages(league, page=100, max_pages=60):
@@ -179,8 +179,9 @@ def _day(stamp):
 def trade_log(league):
     """Rows describing every trade in ESPN's transaction log, or None when the log cannot be read.
 
-    Each row is one player moved, with the team the log names for that move. The report never relies on
-    which side of the trade that team was: sender and receiver are confirmed against the weekly rosters.
+    ESPN logs every moved player twice: once for the team that sent him (TRADE_SENT) and once for the team
+    that received him (TRADE_RECEIVED). Each row keeps that role ('sent', 'received', or 'moved' when the
+    label does not say). The report still confirms the week and direction against the weekly rosters.
     An empty list means the log was read and the league has no trades yet.
     """
     try:
@@ -197,8 +198,10 @@ def trade_log(league):
         trade_id = f"t{activity.date}_{hashlib.md5(label.encode()).hexdigest()[:6]}"
         for action in moves:
             pid, name = _player_fields(action[2])
+            text = str(action[1]).upper()
+            role = 'sent' if 'SENT' in text else 'received' if 'RECEIVED' in text else 'moved'
             rows.append(dict(trade_id=trade_id, trade_date=_day(activity.date),
-                             team_id=getattr(action[0], 'team_id', action[0]),
+                             team_id=getattr(action[0], 'team_id', action[0]), role=role,
                              player_id=None if pid is None else str(pid), player_name=name, kind='trade'))
     return rows
 
